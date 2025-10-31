@@ -24,14 +24,7 @@
 <meta name="twitter:title" content="Munetios Notebook - Create your own journal">
 <meta name="twitter:description" content="Create your own journal with Munetios Notebook. Organize your notes, ideas, and projects in one place. Start writing today!">
 <meta name="twitter:image" content="https://notebook.munetios.com/android-chrome-192x192.png">
-       <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      if (window.top !== window.self) {
-        // Hide everything (html + body)
-        document.documentElement.style.display = "none";  
-      }
-    });
-  </script>
+
 <!-- End Boost SEO -->
  <style>
     * {
@@ -2598,7 +2591,108 @@
             });
             });
         });
+        /**
+         * Sanitize HTML to prevent XSS/script injection.
+         * Removes <script>, <iframe>, <object>, <embed>, <link>, <style>, <form>, <meta>, <base>, <svg>, <math>, <frame>, <frameset>, <applet>, <input>, <button>, <textarea>, <select>, <option>, <noscript>, <audio>, <video> (except <video> with <source>), and all event handler attributes (on*).
+         * Allows only safe tags and attributes.
+         */
+        function sanitizeHtml(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
+            const ALLOWED_TAGS = [
+                'b', 'i', 'u', 's', 'strong', 'em', 'br', 'p', 'ul', 'ol', 'li', 'pre', 'code', 'blockquote',
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'img', 'a', 'hr', 'video', 'source'
+            ];
+            const ALLOWED_ATTRS = {
+                'a': ['href', 'target', 'rel'],
+                'img': ['src', 'alt', 'title', 'width', 'height', 'style'],
+                'video': ['controls', 'width', 'height', 'style'],
+                'source': ['src', 'type'],
+                'span': ['style'],
+                'div': ['style'],
+                'pre': ['style'],
+                'code': ['style'],
+                '*': ['style']
+            };
+            function clean(node) {
+                // Remove disallowed tags
+                if (node.nodeType === 1) {
+                    const tag = node.tagName.toLowerCase();
+                    if (!ALLOWED_TAGS.includes(tag)) {
+                        node.remove();
+                        return;
+                    }
+                    // Remove all event handler attributes and javascript: URLs
+                    [...node.attributes].forEach(attr => {
+                        const name = attr.name.toLowerCase();
+                        const value = attr.value;
+                        // Remove event handlers and dangerous attributes
+                        if (name.startsWith('on') || name === 'srcdoc' || name === 'data' || name === 'formaction') {
+                            node.removeAttribute(attr.name);
+                        } else if (name === 'href' || name === 'src') {
+                            if (/^\s*javascript:/i.test(value) || /^\s*data:/i.test(value) && tag !== 'img' && tag !== 'source') {
+                                node.removeAttribute(attr.name);
+                            }
+                        } else if (
+                            !(ALLOWED_ATTRS[tag] && ALLOWED_ATTRS[tag].includes(name)) &&
+                            !(ALLOWED_ATTRS['*'] && ALLOWED_ATTRS['*'].includes(name))
+                        ) {
+                            node.removeAttribute(attr.name);
+                        }
+                    });
+                    // Special: <video> only allow <source> as children, remove others
+                    if (tag === 'video') {
+                        Array.from(node.childNodes).forEach(child => {
+                            if (child.nodeType === 1 && child.tagName.toLowerCase() !== 'source') {
+                                child.remove();
+                            }
+                        });
+                    }
+                }
+                // Recursively clean children
+                Array.from(node.childNodes).forEach(clean);
+            }
+            clean(doc.body.firstChild);
+            return doc.body.firstChild.innerHTML;
+        }
 
+        // Patch all notebook content saves to sanitize HTML
+        const origSaveEditorPagesForSanitize = saveEditorPages;
+        saveEditorPages = function() {
+            // Sanitize all page contents before saving
+            const pageDivs = document.querySelectorAll('.editor-page');
+            notebookPages = Array.from(pageDivs).map(div => ({
+                title: div.querySelector('.page-title').value,
+                content: sanitizeHtml(div.querySelector('.page-content').innerHTML)
+            }));
+            saveNotebookPagesToDB();
+        };
+
+        // Patch import notebook to sanitize imported HTML
+        const origImportNotebook = window.importNotebookFromFile;
+        window.importNotebookFromFile = function(file, ext, content) {
+            if (ext === 'html' || ext === 'htm') {
+                // Sanitize imported HTML
+                let doc = document.createElement('html');
+                doc.innerHTML = content;
+                let pageTitle = doc.querySelector('title') ? doc.querySelector('title').textContent : file.name.replace(/\.[^/.]+$/, '');
+                let body = doc.querySelector('body') ? doc.querySelector('body').innerHTML : content;
+                body = sanitizeHtml(body);
+                return [{ title: pageTitle, content: body }];
+            }
+            // fallback to original if not html
+            return origImportNotebook ? origImportNotebook(file, ext, content) : null;
+        };
+
+        // Patch renderEditorPages to sanitize on display (defense in depth)
+        const origRenderEditorPagesForSanitize = renderEditorPages;
+        renderEditorPages = function() {
+            origRenderEditorPagesForSanitize();
+            // Sanitize all .page-content after rendering
+            document.querySelectorAll('.editor-page .page-content').forEach(div => {
+                div.innerHTML = sanitizeHtml(div.innerHTML);
+            });
+        };
         // Open editor without injecting content
         function openEditor(notebook, fromRoute) {
             document.querySelector('.home-screen').style.display = 'none';
@@ -2629,4 +2723,3 @@
     </script>
 </body>
 </html> 
-
