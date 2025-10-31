@@ -9,8 +9,8 @@
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="icon" href="favicon.ico" type="image/x-icon">
-<!-- Poppins -->
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- Lexend -->
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <!-- Boost SEO -->
 <meta name="description" content="Create your own journal with Munetios Notebook. Organize your notes, ideas, and projects in one place. Start writing today!">
 <meta name="keywords" content="Munetios Notebook, notebook, journal creation, note-taking, writing, organization, projects">
@@ -28,10 +28,10 @@
 <!-- End Boost SEO -->
  <style>
     * {
-        font-family: Poppins, sans-serif !important;
+        font-family: 'Lexend', sans-serif !important;
     }
     body {
-        font-family: 'Poppins', sans-serif;
+        font-family: 'Lexend', sans-serif;
         margin: 0;
         padding: 0;
         background-color: #210041;
@@ -2063,14 +2063,16 @@
             const notebooks = await getNotebooksFromDB();
             const container = document.getElementById('notebooks');
             if (!container) return;
+            // Filter out archived and trashed notebooks
+            const visibleNotebooks = notebooks.filter(nb => !nb.archived && !nb.trashed);
             container.innerHTML = '';
-            if (notebooks.length === 0) {
+            if (visibleNotebooks.length === 0) {
                 container.innerHTML = '<div style="color:#e0d6f7;">No notebooks yet. Click Create to add one.</div>';
                 return;
             }
             // Sort notebooks
             const sortValue = document.getElementById('sortBySelect').value;
-            let sorted = [...notebooks];
+            let sorted = [...visibleNotebooks];
             sorted.sort((a, b) => {
                 if (sortValue === 'lastModifiedDesc') {
                     return (b.updatedAt || b.id) - (a.updatedAt || a.id);
